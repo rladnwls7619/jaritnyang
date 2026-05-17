@@ -1,0 +1,28 @@
+{
+  "name": "자릿냥",
+  "short_name": "자릿냥",
+  "description": "방문자가 함께 업데이트하는 실시간 매장 좌석 확인 앱",
+  "id": "/",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f7fbf8",
+  "theme_color": "#2f7d6d",
+  "lang": "ko-KR",
+  "categories": ["navigation", "food", "utilities"],
+  "icons": [
+    {
+      "src": "./icons/jaritnyang-cat-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./icons/jaritnyang-cat-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

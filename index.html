@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="자릿냥 - 방문자가 직접 업데이트하는 매장 좌석 실시간 확인 플랫폼 MVP"
+    />
+    <meta name="theme-color" content="#2f7d6d" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="자릿냥" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icons/jaritnyang-cat-192.png" />
+    <link rel="apple-touch-icon" href="./icons/jaritnyang-cat-192.png" />
+    <link rel="stylesheet" href="./styles.css" />
+    <title>자릿냥</title>
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="topbar" aria-label="앱 상단">
+        <div class="brand-block">
+          <div class="cat-mark" aria-hidden="true">
+            <span class="cat-ear left"></span>
+            <span class="cat-ear right"></span>
+            <span class="cat-face">냥</span>
+          </div>
+          <div>
+            <p class="eyebrow">방문자 참여형 좌석 현황</p>
+            <h1>자릿냥</h1>
+          </div>
+        </div>
+        <div class="points-panel" aria-live="polite">
+          <span>내 생선 포인트</span>
+          <strong id="pointBalance">0P</strong>
+        </div>
+        <div class="user-panel" aria-live="polite">
+          <span id="userStatus">비회원</span>
+          <button id="authButton" class="ghost-button" type="button">로그인</button>
+        </div>
+        <button id="installPwaButton" class="install-button" type="button" hidden>앱 설치</button>
+      </section>
+
+      <section class="search-panel" aria-label="매장 검색">
+        <label for="searchInput">매장명 또는 동네</label>
+        <div class="search-row">
+          <input
+            id="searchInput"
+            type="search"
+            placeholder="예: 강남, 성수, 카페, 맛집"
+            autocomplete="off"
+          />
+          <select id="categoryFilter" aria-label="카테고리 필터">
+            <option value="all">전체</option>
+            <option value="cafe">카페</option>
+            <option value="study">스터디</option>
+            <option value="food">음식점</option>
+          </select>
+          <button id="googleSearchButton" class="primary-button" type="button">구글 검색</button>
+          <button id="nearbyButton" class="ghost-button" type="button">내 주변</button>
+        </div>
+        <p id="searchStatus" class="search-status" aria-live="polite">
+          데모 매장과 Google Maps 위치를 먼저 보여주고 있어요.
+        </p>
+      </section>
+
+      <section class="layout-grid">
+        <aside class="store-list" aria-label="매장 목록">
+          <div class="section-heading">
+            <h2>동네 자리 탐색</h2>
+            <button id="resetDemoButton" class="ghost-button" type="button">초기화</button>
+          </div>
+          <div id="storeList" class="store-list-items"></div>
+        </aside>
+
+        <section class="detail-panel" aria-label="선택한 매장 상세">
+          <div id="storeDetail"></div>
+        </section>
+      </section>
+    </main>
+
+    <template id="seatTemplate">
+      <button class="seat-card" type="button">
+        <span class="seat-name"></span>
+        <span class="seat-status"></span>
+        <span class="seat-time"></span>
+      </button>
+    </template>
+
+    <dialog id="checkInDialog" class="dialog">
+      <form method="dialog" id="checkInForm">
+        <div class="dialog-head">
+          <div>
+            <p class="eyebrow">좌석 이용 등록</p>
+            <h2 id="dialogTitle">좌석 선택</h2>
+          </div>
+          <button class="icon-button" value="cancel" aria-label="닫기">×</button>
+        </div>
+
+        <label for="durationInput">예상 이용 시간</label>
+        <div class="duration-control">
+          <input id="durationInput" type="range" min="15" max="180" step="15" value="60" />
+          <output id="durationOutput" for="durationInput">60분</output>
+        </div>
+
+        <label for="memoInput">상태 메모</label>
+        <input
+          id="memoInput"
+          type="text"
+          maxlength="24"
+          placeholder="예: 노트북 작업, 식사 중"
+        />
+
+        <menu class="dialog-actions">
+          <button value="cancel" class="ghost-button">취소</button>
+          <button id="submitCheckIn" value="default" class="primary-button">이용 시작</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog id="authDialog" class="dialog">
+      <form method="dialog" id="authForm">
+        <div class="dialog-head">
+          <div>
+            <p class="eyebrow">회원가입 / 로그인</p>
+            <h2>자릿냥 시작하기</h2>
+          </div>
+          <button class="icon-button" value="cancel" aria-label="닫기">×</button>
+        </div>
+
+        <div class="provider-grid">
+          <button class="provider-button" type="button" data-provider="kakao">카카오톡</button>
+          <button class="provider-button" type="button" data-provider="google">구글</button>
+        </div>
+
+        <label for="displayNameInput">닉네임</label>
+        <input id="displayNameInput" type="text" maxlength="16" placeholder="예: 자리냥이" />
+
+        <label for="emailInput">이메일</label>
+        <input id="emailInput" type="email" placeholder="me@example.com" />
+
+        <label for="phoneInput">전화번호</label>
+        <input id="phoneInput" type="tel" placeholder="01012345678" />
+
+        <menu class="dialog-actions">
+          <button value="cancel" class="ghost-button">취소</button>
+          <button id="submitAuth" value="default" class="primary-button">이메일로 시작</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog id="visitDialog" class="dialog">
+      <form method="dialog" id="visitForm">
+        <div class="dialog-head">
+          <div>
+            <p class="eyebrow">방문 인증</p>
+            <h2>실제 방문 확인</h2>
+          </div>
+          <button class="icon-button" value="cancel" aria-label="닫기">×</button>
+        </div>
+
+        <label for="visitCodeInput">매장 QR / 영수증 코드</label>
+        <input id="visitCodeInput" type="text" maxlength="20" placeholder="데모: NYANG" />
+        <p class="search-status">실제 서비스에서는 테이블 QR, NFC, 영수증 코드 중 하나로 확인합니다.</p>
+
+        <menu class="dialog-actions">
+          <button value="cancel" class="ghost-button">취소</button>
+          <button id="submitVisit" value="default" class="primary-button">방문 인증</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <script src="./app.js?v=auth-ad-1"></script>
+    <script src="./pwa.js?v=auth-ad-1"></script>
+  </body>
+</html>
