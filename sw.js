@@ -1,12 +1,12 @@
-const CACHE_NAME = "jaritnyang-pwa-v8";
+const CACHE_NAME = "jaritnyang-pwa-v10";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./offline.html",
-  "./styles.css",
-  "./config.js?v=db-4",
-  "./supabase-db.js?v=db-4",
-  "./app.js?v=db-4",
+  "./styles.css?v=logo-1",
+  "./config.js?v=db-5",
+  "./supabase-db.js?v=db-5",
+  "./app.js?v=db-5",
   "./manifest.webmanifest",
   "./icons/jaritnyang-cat-192.png",
   "./icons/jaritnyang-cat-512.png",

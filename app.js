@@ -64,7 +64,7 @@ const visitCodeInput = document.querySelector("#visitCodeInput");
 
 render();
 initializeDatabase();
-setInterval(render, TIMER_REFRESH_MS);
+setInterval(tickLiveTimers, TIMER_REFRESH_MS);
 
 searchInput.addEventListener("input", render);
 searchInput.addEventListener("keydown", (event) => {
@@ -778,6 +778,47 @@ function render() {
   renderStoreDetail();
 }
 
+function tickLiveTimers() {
+  const expired = expireSeats();
+  if (expired) {
+    render();
+    return;
+  }
+
+  updateSeatTimerPins();
+  updateLeaveButtonTimer();
+}
+
+function updateSeatTimerPins() {
+  const store = getSelectedStore();
+  if (!store) return;
+
+  store.seats.forEach((seat) => {
+    const pin = document.querySelector(
+      `.seat-pin[data-store-id="${escapeSelectorValue(store.id)}"][data-seat-id="${escapeSelectorValue(seat.id)}"]`,
+    );
+    if (!pin) return;
+
+    const timerInfo = getSeatTimerInfo(seat);
+    const time = pin.querySelector(".seat-pin-time");
+    if (time) time.textContent = timerInfo.label;
+    pin.title = `${seat.label} · ${timerInfo.title}`;
+    pin.classList.toggle("soon", timerInfo.isSoon);
+  });
+}
+
+function updateLeaveButtonTimer() {
+  const button = document.querySelector("#leaveSeatButton");
+  if (!button) return;
+
+  const cooldown = getPointCooldown();
+  button.disabled = cooldown.remainingMs > 0;
+  button.textContent =
+    cooldown.remainingMs > 0
+      ? `자리 비우기 (${formatRemainingTime(cooldown.remainingMs)})`
+      : "자리 비우기";
+}
+
 function renderUserPanel() {
   accountButton.hidden = false;
   if (!state.currentUser) {
@@ -960,6 +1001,8 @@ function renderStoreDetail() {
     const timerInfo = getSeatTimerInfo(seat);
     card.type = "button";
     card.className = `seat-pin ${seat.status === "available" ? "available" : "occupied"}`;
+    card.dataset.storeId = store.id;
+    card.dataset.seatId = seat.id;
     if (timerInfo.isSoon) card.classList.add("soon");
     if (isMine) card.classList.add("mine");
     if (seatEditMode) card.classList.add("editing");
@@ -1206,6 +1249,7 @@ function expireSeats() {
     });
   });
   if (changed) saveState();
+  return changed;
 }
 
 function ensureStoreShape(store) {
@@ -1479,6 +1523,11 @@ function formatDateTime(time) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(time));
+}
+
+function escapeSelectorValue(value) {
+  if (window.CSS?.escape) return window.CSS.escape(String(value));
+  return String(value).replace(/["\\]/g, "\\$&");
 }
 
 function getSessionStatusLabel(status) {
