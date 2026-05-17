@@ -47,6 +47,12 @@
     await client.auth.signOut();
   }
 
+  function onAuthStateChange(callback) {
+    if (!client) return null;
+    const { data } = client.auth.onAuthStateChange(callback);
+    return data?.subscription || null;
+  }
+
   async function upsertProfile(user, displayName) {
     if (!client || !user) return;
     const provider = user.app_metadata?.provider || (user.phone ? "phone" : "email");
@@ -57,6 +63,66 @@
       phone: user.phone || null,
     });
     if (error) console.warn("Profile sync failed", error);
+  }
+
+  async function updateProfile({ displayName }) {
+    if (!client) throw new Error("SUPABASE_NOT_CONFIGURED");
+    const user = await getCurrentUser();
+    if (!user) throw new Error("LOGIN_REQUIRED");
+    const { data, error } = await client
+      .from("profiles")
+      .update({ display_name: displayName })
+      .eq("id", user.id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  }
+
+  async function loadAccountData() {
+    if (!client) throw new Error("SUPABASE_NOT_CONFIGURED");
+    const user = await getCurrentUser();
+    if (!user) throw new Error("LOGIN_REQUIRED");
+
+    const [profileResponse, sessionsResponse, pointsResponse, visitsResponse, billingResponse] = await Promise.all([
+      client.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+      client
+        .from("seat_sessions")
+        .select("*, stores(name), seats(label)")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(10),
+      client
+        .from("point_events")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(10),
+      client
+        .from("verified_visits")
+        .select("*, stores(name)")
+        .eq("user_id", user.id)
+        .order("verified_at", { ascending: false })
+        .limit(10),
+      client
+        .from("billing_events")
+        .select("*, stores(name)")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(10),
+    ]);
+
+    const responses = [sessionsResponse, pointsResponse, visitsResponse, billingResponse];
+    const failed = responses.find((response) => response.error);
+    if (failed) throw failed.error;
+
+    return {
+      profile: profileResponse.data || null,
+      sessions: sessionsResponse.data || [],
+      pointEvents: pointsResponse.data || [],
+      verifiedVisits: visitsResponse.data || [],
+      billingEvents: billingResponse.data || [],
+    };
   }
 
   async function loadStores() {
@@ -241,10 +307,13 @@
     isConfigured: () => isConfigured,
     getClient,
     getCurrentUser,
+    onAuthStateChange,
     signInWithOtp,
     signInWithOAuth,
     signOut,
     upsertProfile,
+    updateProfile,
+    loadAccountData,
     loadStores,
     startSeatSession,
     endSeatSession,

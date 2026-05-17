@@ -864,6 +864,10 @@ button:focus-visible {
   box-shadow: var(--shadow);
 }
 
+.account-dialog {
+  width: min(620px, calc(100% - 24px));
+}
+
 .dialog::backdrop {
   background: rgba(28, 35, 33, 0.36);
 }
@@ -917,6 +921,66 @@ button:focus-visible {
   margin: 18px 0 0;
 }
 
+.inline-form-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.account-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0 16px;
+}
+
+.account-metric {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfffc;
+}
+
+.account-metric span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.account-metric strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.account-section {
+  margin-top: 16px;
+}
+
+.account-section h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.account-list {
+  display: grid;
+  gap: 6px;
+}
+
+.account-list-item {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: #fffaf7;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 @media (max-width: 860px) {
   .app-shell {
     width: min(100% - 20px, 720px);
@@ -950,7 +1014,9 @@ button:focus-visible {
   }
 
   .business-panel,
-  .provider-grid {
+  .provider-grid,
+  .account-summary,
+  .inline-form-row {
     grid-template-columns: 1fr;
   }
 

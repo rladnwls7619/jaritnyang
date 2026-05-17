@@ -37,6 +37,7 @@
         </div>
         <div class="user-panel" aria-live="polite">
           <span id="userStatus">비회원</span>
+          <button id="accountButton" class="ghost-button" type="button">내 계정</button>
           <button id="authButton" class="ghost-button" type="button">로그인</button>
         </div>
         <button id="installPwaButton" class="install-button" type="button" hidden>앱 설치</button>
@@ -150,6 +151,46 @@
       </form>
     </dialog>
 
+    <dialog id="accountDialog" class="dialog account-dialog">
+      <form method="dialog">
+        <div class="dialog-head">
+          <div>
+            <p class="eyebrow">내 계정</p>
+            <h2>자릿냥 회원 정보</h2>
+          </div>
+          <button class="icon-button" value="cancel" aria-label="닫기">×</button>
+        </div>
+
+        <section id="accountSummary" class="account-summary"></section>
+
+        <label for="accountNameInput">닉네임</label>
+        <div class="inline-form-row">
+          <input id="accountNameInput" type="text" maxlength="16" placeholder="닉네임" />
+          <button id="saveAccountButton" class="primary-button" type="button">저장</button>
+        </div>
+
+        <section class="account-section">
+          <h3>최근 이용 기록</h3>
+          <div id="accountSessions" class="account-list"></div>
+        </section>
+
+        <section class="account-section">
+          <h3>포인트 기록</h3>
+          <div id="accountPoints" class="account-list"></div>
+        </section>
+
+        <section class="account-section">
+          <h3>방문/광고 기록</h3>
+          <div id="accountVisits" class="account-list"></div>
+        </section>
+
+        <menu class="dialog-actions">
+          <button value="cancel" class="ghost-button">닫기</button>
+          <button id="accountLogoutButton" class="danger-button" type="button">로그아웃</button>
+        </menu>
+      </form>
+    </dialog>
+
     <dialog id="visitDialog" class="dialog">
       <form method="dialog" id="visitForm">
         <div class="dialog-head">
@@ -172,9 +213,9 @@
     </dialog>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./config.js?v=db-2"></script>
-    <script src="./supabase-db.js?v=db-2"></script>
-    <script src="./app.js?v=db-2"></script>
-    <script src="./pwa.js?v=db-2"></script>
+    <script src="./config.js?v=db-4"></script>
+    <script src="./supabase-db.js?v=db-4"></script>
+    <script src="./app.js?v=db-4"></script>
+    <script src="./pwa.js?v=db-4"></script>
   </body>
 </html>

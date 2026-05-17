@@ -32,6 +32,7 @@ const storeDetail = document.querySelector("#storeDetail");
 const pointBalance = document.querySelector("#pointBalance");
 const userStatus = document.querySelector("#userStatus");
 const authButton = document.querySelector("#authButton");
+const accountButton = document.querySelector("#accountButton");
 const searchInput = document.querySelector("#searchInput");
 const categoryFilter = document.querySelector("#categoryFilter");
 const googleSearchButton = document.querySelector("#googleSearchButton");
@@ -42,6 +43,14 @@ const checkInDialog = document.querySelector("#checkInDialog");
 const checkInForm = document.querySelector("#checkInForm");
 const authDialog = document.querySelector("#authDialog");
 const authForm = document.querySelector("#authForm");
+const accountDialog = document.querySelector("#accountDialog");
+const accountSummary = document.querySelector("#accountSummary");
+const accountSessions = document.querySelector("#accountSessions");
+const accountPoints = document.querySelector("#accountPoints");
+const accountVisits = document.querySelector("#accountVisits");
+const accountNameInput = document.querySelector("#accountNameInput");
+const saveAccountButton = document.querySelector("#saveAccountButton");
+const accountLogoutButton = document.querySelector("#accountLogoutButton");
 const visitDialog = document.querySelector("#visitDialog");
 const visitForm = document.querySelector("#visitForm");
 const dialogTitle = document.querySelector("#dialogTitle");
@@ -69,15 +78,23 @@ googleSearchButton.addEventListener("click", searchGooglePlaces);
 nearbyButton.addEventListener("click", findNearbyStores);
 authButton.addEventListener("click", async () => {
   if (state.currentUser) {
-    if (window.JaritnyangDB?.isConfigured()) {
-      await window.JaritnyangDB.signOut();
-    }
-    state.currentUser = null;
-    saveState();
-    render();
+    await signOutCurrentUser();
     return;
   }
   authDialog.showModal();
+});
+
+accountButton.addEventListener("click", () => {
+  void openAccountDialog();
+});
+
+saveAccountButton.addEventListener("click", () => {
+  void saveAccountProfile();
+});
+
+accountLogoutButton.addEventListener("click", async () => {
+  accountDialog.close();
+  await signOutCurrentUser();
 });
 resetDemoButton.addEventListener("click", () => {
   localStorage.removeItem(STORAGE_KEY);
@@ -313,6 +330,22 @@ async function initializeDatabase() {
 
   try {
     searchStatus.textContent = "Connecting to Supabase DB...";
+    db.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT") {
+        state.currentUser = null;
+        state.activeSeat = null;
+        saveState();
+        render();
+        return;
+      }
+
+      if (session?.user) {
+        applySupabaseUser(session.user);
+        void db.upsertProfile(session.user);
+        void refreshStoresFromDatabase({ silent: true });
+      }
+    });
+
     const user = await db.getCurrentUser();
     if (user) {
       applySupabaseUser(user);
@@ -372,6 +405,140 @@ function applySupabaseUser(user) {
     supabase: true,
   };
   saveState();
+}
+
+async function signOutCurrentUser() {
+  if (window.JaritnyangDB?.isConfigured()) {
+    await window.JaritnyangDB.signOut();
+  }
+  state.currentUser = null;
+  state.activeSeat = null;
+  saveState();
+  render();
+}
+
+async function openAccountDialog() {
+  if (!state.currentUser) {
+    authDialog.showModal();
+    return;
+  }
+
+  accountNameInput.value = state.currentUser.name || "";
+  renderAccountDialog(getDemoAccountData());
+  accountDialog.showModal();
+
+  const db = window.JaritnyangDB;
+  if (!db?.isConfigured() || !state.currentUser.supabase) return;
+
+  try {
+    const data = await db.loadAccountData();
+    renderAccountDialog(data);
+  } catch (error) {
+    console.warn(error);
+    accountSessions.innerHTML = '<p class="empty-state">계정 정보를 불러오지 못했어요. Supabase 권한 설정을 확인해주세요.</p>';
+  }
+}
+
+function renderAccountDialog(data) {
+  const user = state.currentUser;
+  const profile = data.profile || {};
+  const pointBalanceValue = profile.point_balance ?? state.points ?? 0;
+  const trustScore = profile.trust_score ?? 70;
+  accountNameInput.value = profile.display_name || user.name || "";
+  accountSummary.innerHTML = `
+    <div class="account-metric">
+      <span>로그인 방식</span>
+      <strong>${getAuthMethodLabel(user.method)}</strong>
+    </div>
+    <div class="account-metric">
+      <span>계정</span>
+      <strong>${user.contact || "연결됨"}</strong>
+    </div>
+    <div class="account-metric">
+      <span>포인트</span>
+      <strong>${pointBalanceValue}P</strong>
+    </div>
+    <div class="account-metric">
+      <span>냥뢰도</span>
+      <strong>${trustScore}%</strong>
+    </div>
+  `;
+  accountSessions.innerHTML = renderAccountItems(
+    data.sessions,
+    (session) => `${getSessionStatusLabel(session.status)} · ${formatDateTime(session.created_at || session.startedAt)} · ${session.memo || "좌석 이용"}`,
+    "아직 좌석 이용 기록이 없어요.",
+  );
+  accountPoints.innerHTML = renderAccountItems(
+    data.pointEvents,
+    (event) => `${event.amount > 0 ? "+" : ""}${event.amount}P · ${event.reason || "point"} · ${formatDateTime(event.created_at)}`,
+    "아직 포인트 기록이 없어요.",
+  );
+  accountVisits.innerHTML = renderAccountItems(
+    [...data.verifiedVisits, ...data.billingEvents],
+    (item) =>
+      item.amount !== undefined
+        ? `${formatCurrency(item.amount)} · ${item.reason || "billing"} · ${formatDateTime(item.created_at)}`
+        : `${item.verification_method || "visit"} 인증 · ${formatDateTime(item.verified_at || item.created_at)}`,
+    "아직 방문/광고 기록이 없어요.",
+  );
+}
+
+function renderAccountItems(items = [], formatter, emptyText) {
+  if (!items.length) return `<p class="empty-state">${emptyText}</p>`;
+  return items
+    .slice(0, 8)
+    .map((item) => `<div class="account-list-item">${formatter(item)}</div>`)
+    .join("");
+}
+
+function getDemoAccountData() {
+  const active = state.activeSeat;
+  const activeStore = active ? state.stores.find((store) => store.id === active.storeId) : null;
+  const activeSeat = activeStore?.seats.find((seat) => seat.id === active.seatId);
+  return {
+    profile: {
+      display_name: state.currentUser?.name,
+      point_balance: state.points,
+      trust_score: 70,
+    },
+    sessions: activeSeat
+      ? [
+          {
+            status: "active",
+            memo: `${activeStore.name} · ${activeSeat.label}`,
+            startedAt: activeSeat.startedAt,
+          },
+        ]
+      : [],
+    pointEvents: state.points
+      ? [{ amount: state.points, reason: "demo_balance", created_at: state.currentUser?.signedInAt }]
+      : [],
+    verifiedVisits: [],
+    billingEvents: state.billingEvents || [],
+  };
+}
+
+async function saveAccountProfile() {
+  if (!state.currentUser) return;
+  const displayName = accountNameInput.value.trim() || "자릿냥이";
+  state.currentUser.name = displayName;
+  saveState();
+  render();
+
+  const db = window.JaritnyangDB;
+  if (db?.isConfigured() && state.currentUser.supabase) {
+    try {
+      await db.updateProfile({ displayName });
+      searchStatus.textContent = "계정 닉네임이 저장되었습니다.";
+    } catch (error) {
+      console.warn(error);
+      searchStatus.textContent = "닉네임은 화면에 저장됐지만 Supabase 저장은 실패했어요.";
+    }
+  } else {
+    searchStatus.textContent = "데모 계정 닉네임이 저장되었습니다.";
+  }
+
+  await openAccountDialog();
 }
 
 function findMyActiveSeat() {
@@ -612,6 +779,7 @@ function render() {
 }
 
 function renderUserPanel() {
+  accountButton.hidden = false;
   if (!state.currentUser) {
     userStatus.textContent = "비회원";
     authButton.textContent = "로그인";
@@ -1301,4 +1469,23 @@ function formatClock(time) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(time);
+}
+
+function formatDateTime(time) {
+  if (!time) return "시간 정보 없음";
+  return new Intl.DateTimeFormat("ko-KR", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(time));
+}
+
+function getSessionStatusLabel(status) {
+  return {
+    active: "이용 중",
+    ended: "이용 완료",
+    expired: "시간 만료",
+    reported: "신고됨",
+  }[status] || status || "기록";
 }
