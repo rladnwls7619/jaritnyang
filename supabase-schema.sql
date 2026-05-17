@@ -168,6 +168,10 @@ create policy "Anyone can read active seat sessions"
   on public.seat_sessions for select
   using (status = 'active');
 
+create policy "Users can read their own sessions"
+  on public.seat_sessions for select
+  using (auth.uid() = user_id);
+
 create policy "Users can create their own sessions"
   on public.seat_sessions for insert
   with check (auth.uid() = user_id);
