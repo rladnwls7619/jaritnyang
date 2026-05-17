@@ -3,6 +3,7 @@ const GOOGLE_PLACES_SEARCH_ENDPOINT = "/api/google-places-search";
 const GOOGLE_PLACES_NEARBY_ENDPOINT = "/api/google-places-nearby";
 const POINT_COOLDOWN_MS = 60 * 60 * 1000;
 const VERIFIED_VISIT_AD_FEE = 300;
+const TIMER_REFRESH_MS = 1000;
 
 const seedStores = [
   createStore("gangnam-cafe-luna", "카페 루나 강남", "cafe", "서울 강남구 테헤란로 22길", 12, "콘센트 좌석과 2인석이 많은 카페", 37.501, 127.039),
@@ -23,6 +24,8 @@ const state = loadState();
 let selectedStoreId = state.selectedStoreId || state.stores[0].id;
 let pendingSeatId = null;
 let seatEditMode = false;
+let isDatabaseConnected = false;
+let seatSessionChannel = null;
 
 const storeList = document.querySelector("#storeList");
 const storeDetail = document.querySelector("#storeDetail");
@@ -51,10 +54,8 @@ const phoneInput = document.querySelector("#phoneInput");
 const visitCodeInput = document.querySelector("#visitCodeInput");
 
 render();
-setInterval(() => {
-  expireSeats();
-  render();
-}, 30000);
+initializeDatabase();
+setInterval(render, TIMER_REFRESH_MS);
 
 searchInput.addEventListener("input", render);
 searchInput.addEventListener("keydown", (event) => {
@@ -66,8 +67,11 @@ searchInput.addEventListener("keydown", (event) => {
 categoryFilter.addEventListener("change", render);
 googleSearchButton.addEventListener("click", searchGooglePlaces);
 nearbyButton.addEventListener("click", findNearbyStores);
-authButton.addEventListener("click", () => {
+authButton.addEventListener("click", async () => {
   if (state.currentUser) {
+    if (window.JaritnyangDB?.isConfigured()) {
+      await window.JaritnyangDB.signOut();
+    }
     state.currentUser = null;
     saveState();
     render();
@@ -89,7 +93,7 @@ resetDemoButton.addEventListener("click", () => {
   render();
 });
 
-authForm.addEventListener("submit", (event) => {
+authForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const name = displayNameInput.value.trim() || "자릿냥이";
   const email = emailInput.value.trim();
@@ -99,14 +103,37 @@ authForm.addEventListener("submit", (event) => {
     searchStatus.textContent = "이메일이나 전화번호 중 하나를 입력해주세요.";
     return;
   }
+  if (window.JaritnyangDB?.isConfigured()) {
+    try {
+      await window.JaritnyangDB.signInWithOtp({ email, phone });
+      searchStatus.textContent = email
+        ? "Supabase 로그인 메일을 보냈어요. 메일 링크를 누른 뒤 다시 자릿냥으로 돌아오세요."
+        : "Supabase 휴대폰 OTP를 보냈어요. OTP 입력 화면은 다음 단계에서 붙이면 됩니다.";
+      authDialog.close();
+      return;
+    } catch (error) {
+      console.warn(error);
+      searchStatus.textContent = "Supabase 로그인이 실패해서 일단 데모 로그인으로 진행할게요.";
+    }
+  }
+
   signInDemoUser(email ? "email" : "phone", name, contact);
   authDialog.close();
 });
 
 document.querySelectorAll(".provider-button").forEach((button) => {
-  button.addEventListener("click", () => {
+  button.addEventListener("click", async () => {
     const provider = button.dataset.provider;
     const label = provider === "kakao" ? "카카오톡" : "구글";
+    if (window.JaritnyangDB?.isConfigured()) {
+      try {
+        await window.JaritnyangDB.signInWithOAuth(provider);
+        return;
+      } catch (error) {
+        console.warn(error);
+        searchStatus.textContent = "간편 로그인이 실패해서 일단 데모 로그인으로 진행할게요.";
+      }
+    }
     signInDemoUser(provider, `${label} 사용자`, `${provider}@demo.local`);
     authDialog.close();
   });
@@ -149,6 +176,7 @@ checkInForm.addEventListener("submit", (event) => {
     seatId: seat.id,
     expectedEndAt,
   };
+  void syncStartSeatSession(store, seat, expectedEndAt, seat.memo);
   store.activity = [
     `${formatClock(now)} ${seat.label} 이용 예정 시간이 ${durationMinutes}분으로 등록되었습니다.`,
     ...store.activity.filter((item) => !item.includes("아직 등록된")),
@@ -274,6 +302,132 @@ function loadState() {
 function saveState() {
   state.selectedStoreId = selectedStoreId;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+async function initializeDatabase() {
+  const db = window.JaritnyangDB;
+  if (!db?.isConfigured()) {
+    searchStatus.textContent = "Demo mode. Add Supabase values in config.js to use a real DB.";
+    return;
+  }
+
+  try {
+    searchStatus.textContent = "Connecting to Supabase DB...";
+    const user = await db.getCurrentUser();
+    if (user) {
+      applySupabaseUser(user);
+      await db.upsertProfile(user);
+    }
+
+    await refreshStoresFromDatabase();
+    isDatabaseConnected = true;
+    searchStatus.textContent = "Supabase DB connected. Seat updates can now sync in real time.";
+
+    seatSessionChannel = db.subscribeToSeatSessions(() => {
+      void refreshStoresFromDatabase({ silent: true });
+    });
+  } catch (error) {
+    console.warn(error);
+    isDatabaseConnected = false;
+    searchStatus.textContent = "Supabase DB connection failed. The app is staying in demo mode.";
+  }
+}
+
+async function refreshStoresFromDatabase(options = {}) {
+  const db = window.JaritnyangDB;
+  if (!db?.isConfigured()) return;
+
+  const stores = await db.loadStores();
+  if (!stores.length) {
+    if (!options.silent) {
+      searchStatus.textContent = "Supabase is connected, but no stores exist yet. Run supabase-seed.sql first.";
+    }
+    return;
+  }
+
+  state.stores = stores;
+  const selectedExists = state.stores.some((store) => store.id === selectedStoreId);
+  selectedStoreId = selectedExists ? selectedStoreId : state.stores[0].id;
+  const mySeat = findMyActiveSeat();
+  state.activeSeat = mySeat
+    ? {
+        storeId: mySeat.store.id,
+        seatId: mySeat.seat.id,
+        expectedEndAt: mySeat.seat.expectedEndAt,
+        remoteSessionId: mySeat.seat.remoteSessionId,
+      }
+    : null;
+  saveState();
+  render();
+}
+
+function applySupabaseUser(user) {
+  const provider = user.app_metadata?.provider || (user.phone ? "phone" : "email");
+  state.currentUser = {
+    id: user.id,
+    method: provider,
+    name: user.user_metadata?.name || user.email || user.phone || "Jaritnyang user",
+    contact: user.email || user.phone || "",
+    signedInAt: user.last_sign_in_at ? Date.parse(user.last_sign_in_at) : Date.now(),
+    supabase: true,
+  };
+  saveState();
+}
+
+function findMyActiveSeat() {
+  for (const store of state.stores) {
+    const seat = store.seats.find((item) => item.userToken === "me" && item.status === "occupied");
+    if (seat) return { store, seat };
+  }
+  return null;
+}
+
+async function syncStartSeatSession(store, seat, expectedEndAt, memo) {
+  const db = window.JaritnyangDB;
+  if (!db?.isConfigured()) return;
+
+  try {
+    const session = await db.startSeatSession({
+      storeId: store.id,
+      seatId: seat.id,
+      expectedEndAt: new Date(expectedEndAt).toISOString(),
+      memo,
+    });
+    seat.remoteSessionId = session.id;
+    if (state.activeSeat?.seatId === seat.id) state.activeSeat.remoteSessionId = session.id;
+    saveState();
+  } catch (error) {
+    console.warn(error);
+    searchStatus.textContent = "Seat was saved locally, but DB sync needs a real Supabase login.";
+  }
+}
+
+async function syncEndSeatSession(sessionId) {
+  const db = window.JaritnyangDB;
+  if (!db?.isConfigured() || !sessionId) return;
+
+  try {
+    await db.endSeatSession(sessionId);
+  } catch (error) {
+    console.warn(error);
+    searchStatus.textContent = "Seat was released locally, but DB sync did not finish.";
+  }
+}
+
+async function syncVerifiedVisit(store, seat) {
+  const db = window.JaritnyangDB;
+  if (!db?.isConfigured()) return;
+
+  try {
+    await db.verifyVisit({
+      storeId: store.id,
+      sessionId: seat.remoteSessionId || state.activeSeat?.remoteSessionId || null,
+      method: "receipt_code",
+    });
+  } catch (error) {
+    console.warn(error);
+    searchStatus.textContent = "Visit was verified locally, but DB sync needs a real Supabase login.";
+  }
 }
 
 function signInDemoUser(method, name, contact) {
@@ -635,14 +789,22 @@ function renderStoreDetail() {
   store.seats.forEach((seat) => {
     const card = document.createElement("button");
     const isMine = seat.userToken === "me";
+    const timerInfo = getSeatTimerInfo(seat);
     card.type = "button";
     card.className = `seat-pin ${seat.status === "available" ? "available" : "occupied"}`;
+    if (timerInfo.isSoon) card.classList.add("soon");
     if (isMine) card.classList.add("mine");
     if (seatEditMode) card.classList.add("editing");
     card.style.left = `${seat.x}%`;
     card.style.top = `${seat.y}%`;
-    card.textContent = seat.label.replace(" 좌석", "");
-    card.title = `${seat.label} · ${seat.status === "available" ? "비었냥" : "이용 중"}`;
+    const label = document.createElement("span");
+    label.className = "seat-pin-label";
+    label.textContent = seat.label.replace(" 좌석", "");
+    const time = document.createElement("span");
+    time.className = "seat-pin-time";
+    time.textContent = timerInfo.label;
+    card.append(label, time);
+    card.title = `${seat.label} · ${timerInfo.title}`;
     card.addEventListener("click", (event) => {
       event.stopPropagation();
       if (seatEditMode) {
@@ -765,6 +927,7 @@ function releaseCurrentSeat(earnPoints) {
   const isVerified = Boolean(seat.verifiedAt);
   const canEarnPoints = earnPoints && leftEarly && isVerified && cooldown.remainingMs === 0;
   const earned = canEarnPoints ? Math.min(50, Math.max(5, minutesEarly)) : 0;
+  const remoteSessionId = seat.remoteSessionId || active.remoteSessionId;
 
   state.points += earned;
   if (earned > 0) state.lastPointEarnedAt = now;
@@ -785,7 +948,9 @@ function releaseCurrentSeat(earnPoints) {
   seat.userToken = null;
   seat.memo = "";
   seat.verifiedAt = null;
+  seat.remoteSessionId = null;
   state.activeSeat = null;
+  void syncEndSeatSession(remoteSessionId);
 }
 
 function verifyCurrentVisit() {
@@ -810,6 +975,7 @@ function verifyCurrentVisit() {
   seat.verifiedAt = now;
   state.activeSeat.verifiedAt = now;
   recordVerifiedVisit(store, now);
+  void syncVerifiedVisit(store, seat);
   store.activity = [
     `${formatClock(now)} ${state.currentUser.name}님의 실제 방문이 인증되었습니다.`,
     ...store.activity.filter((item) => !item.includes("아직 등록된")),
@@ -855,6 +1021,7 @@ function simulateVisitorUpdate(store) {
 
 function expireSeats() {
   const now = Date.now();
+  let changed = false;
   state.stores.forEach((store) => {
     store.seats.forEach((seat) => {
       if (seat.status === "occupied" && seat.expectedEndAt <= now) {
@@ -864,10 +1031,13 @@ function expireSeats() {
         seat.expectedEndAt = null;
         seat.userToken = null;
         seat.memo = "";
+        seat.verifiedAt = null;
+        seat.remoteSessionId = null;
+        changed = true;
       }
     });
   });
-  saveState();
+  if (changed) saveState();
 }
 
 function ensureStoreShape(store) {
@@ -948,6 +1118,31 @@ function formatRemainingTime(ms) {
   if (hours <= 0) return `${minutes}분`;
   if (minutes === 0) return `${hours}시간`;
   return `${hours}시간 ${minutes}분`;
+}
+
+function getSeatTimerInfo(seat) {
+  if (seat.status === "available") {
+    return {
+      label: "비었냥",
+      title: "바로 이용 가능",
+      isSoon: false,
+    };
+  }
+
+  const remainingMs = Math.max(0, seat.expectedEndAt - Date.now());
+  const isSoon = remainingMs <= 15 * 60 * 1000;
+  const countdown = formatSeatCountdown(remainingMs);
+  return {
+    label: countdown,
+    title: `${countdown} 후 비울 예정${seat.memo ? ` · ${seat.memo}` : ""}`,
+    isSoon,
+  };
+}
+
+function formatSeatCountdown(ms) {
+  if (ms <= 0) return "곧 비움";
+  if (ms < 60 * 1000) return `${Math.ceil(ms / 1000)}초`;
+  return formatRemainingTime(ms);
 }
 
 function addSeatAt(store, x, y) {

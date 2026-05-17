@@ -2,6 +2,17 @@
 
 방문자가 직접 좌석 이용 예정 시간을 업데이트하고, 다른 사용자가 그 정보를 기준으로 매장 잔여 자리를 확인하는 웹앱 프로토타입입니다.
 
+## 실제 DB 연결
+
+Supabase 연결용 코드가 추가되었습니다.
+
+1. `supabase-schema.sql`을 Supabase SQL Editor에서 실행합니다.
+2. `supabase-seed.sql`을 실행해서 테스트 매장/좌석을 넣습니다.
+3. `config.js`에 Supabase `Project URL`과 `anon public key`를 입력합니다.
+4. GitHub에 다시 올리면 Vercel이 자동 재배포합니다.
+
+자세한 순서는 `SUPABASE_SETUP.md`를 보면 됩니다.
+
 ## 첫 버전 기능
 
 - 매장 목록 검색과 카테고리 필터

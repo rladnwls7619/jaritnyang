@@ -596,22 +596,50 @@ button:focus-visible {
 
 .seat-pin {
   position: absolute;
-  display: grid;
-  place-items: center;
-  width: 46px;
-  height: 46px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 72px;
+  min-height: 52px;
+  padding: 5px 7px;
   border: 2px solid var(--accent);
-  border-radius: 50%;
+  border-radius: 16px;
   background: #ffffff;
   color: var(--accent-strong);
   font-size: 12px;
   font-weight: 900;
+  line-height: 1;
   transform: translate(-50%, -50%);
   box-shadow: 0 8px 20px rgba(39, 48, 45, 0.16);
 }
 
+.seat-pin-label,
+.seat-pin-time {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seat-pin-label {
+  font-size: 12px;
+}
+
+.seat-pin-time {
+  font-size: 10px;
+  font-weight: 900;
+}
+
 .seat-pin.available {
   background: var(--mint);
+}
+
+.seat-pin.available .seat-pin-time {
+  color: var(--accent-strong);
 }
 
 .seat-pin.occupied {
@@ -620,9 +648,29 @@ button:focus-visible {
   color: var(--danger);
 }
 
+.seat-pin.occupied .seat-pin-time {
+  color: #8f2840;
+}
+
+.seat-pin.soon {
+  border-color: #d68a13;
+  background: #fff5d7;
+  color: #865700;
+  box-shadow: 0 8px 22px rgba(214, 138, 19, 0.24);
+}
+
+.seat-pin.soon .seat-pin-time {
+  color: #865700;
+}
+
 .seat-pin.mine {
   border-color: var(--blue);
   background: #eff6ff;
+  color: var(--blue);
+  box-shadow: 0 8px 24px rgba(43, 105, 179, 0.24);
+}
+
+.seat-pin.mine .seat-pin-time {
   color: var(--blue);
 }
 
